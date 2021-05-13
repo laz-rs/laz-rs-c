@@ -52,7 +52,7 @@ impl Seek for CFile {
             };
 
             if pos != 0 && whence != libc::SEEK_CUR {
-                let result = dbg!(libc::fseek(self.fh.as_ptr(), pos, whence));
+                let result = dbg!(libc::fseek(self.fh.as_ptr(), pos.into(), whence));
                 if result != 0 {
                     return Err(std::io::Error::from_raw_os_error(result));
                 }

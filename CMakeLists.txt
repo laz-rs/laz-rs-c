@@ -1,7 +1,12 @@
 cmake_minimum_required(VERSION 3.17)
 project(test_lasrsc)
 
-set(LIB_NAME laz_rs_c)
+if (WIN32)
+   set(LIB_NAME laz_rs_c)
+ else()
+   set(LIB_NAME liblaz_rs_c)
+ endif()
+
 
 
 
@@ -32,15 +37,21 @@ else()
     )
 endif()
 
+if (WIN32)
+    set(CARGO_LIB "${CARGO_TARGET}.dll.lib")
+else()
+   set(CARGO_LIB "${CARGO_TARGET}.so")
+endif()
 
 message("${CARGO_TARGET}")
 add_executable(test_lazrsc test_lazrsc.c)
 target_include_directories(test_lazrsc PRIVATE "${CMAKE_CURRENT_LIST_DIR}")
-target_link_libraries(test_lazrsc PRIVATE "${CARGO_TARGET}.dll.lib")
+target_link_libraries(test_lazrsc PRIVATE "${CARGO_LIB}")
 
 add_dependencies(test_lazrsc cargo_build)
-
-add_custom_command(
-        TARGET test_lazrsc POST_BUILD
-        COMMAND "${CMAKE_COMMAND}" -E copy "${CARGO_TARGET}.dll" "$<TARGET_FILE_DIR:test_lazrsc>"
-)
+if (WIN32)
+    add_custom_command(
+            TARGET test_lazrsc POST_BUILD
+            COMMAND "${CMAKE_COMMAND}" -E copy "${CARGO_TARGET}.dll" "$<TARGET_FILE_DIR:test_lazrsc>"
+    )
+endif()

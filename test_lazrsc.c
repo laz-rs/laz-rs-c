@@ -122,17 +122,17 @@ void print_vlrs(const las_header* header) {
   }
 }
 
-int main(void) {
-  printf("Hello World\n");
-
-  FILE *file =
-      fopen("C:/Users/Thomas/Projects/laz-rs/tests/data/point10.laz", "rb");
-  if (file == NULL) {
-    ferror(file);
+int main(int argc, char *argv[]) {
+  if (argc < 2) {
+    printf("Usage: %s file.laz\n", argv[0]);
     return EXIT_FAILURE;
   }
-  printf("tell: %ld\n", ftell(file));
-  //tell(file);
+
+  FILE *file = fopen(argv[1], "rb");
+  if (file == NULL) {
+    perror("fopen");
+    return EXIT_FAILURE;
+  }
 
   las_header header;
   las_error error;
@@ -162,7 +162,7 @@ int main(void) {
   uint8_t *point_data = malloc(header.point_size * sizeof(uint8_t));
   if (point_data == NULL) {
     fprintf(stderr, "OOM\n");
-//    lazrs_delete_decompressor(decompressor);
+    lazrs_delete_decompressor(decompressor);
     fclose(file);
     las_clean_header(&header);
     return EXIT_FAILURE;
