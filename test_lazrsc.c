@@ -1,4 +1,4 @@
-#include <lazrs.h>
+#include <lazrs/lazrs.h>
 
 #include <stdint.h>
 #include <stdio.h>
