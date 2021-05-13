@@ -1,7 +1,11 @@
+#![allow(non_snake_case, non_camel_case_types, non_upper_case_globals)]
+
 use laz;
 use libc;
 use std::io::{Cursor, Read, Seek, SeekFrom};
 use std::ptr::NonNull;
+use laz::LasZipError;
+use crate::LazrsResult::LAZRS_OTHER;
 
 #[derive(Copy, Clone)]
 struct CFile {
@@ -12,7 +16,6 @@ unsafe impl Send for CFile {}
 
 impl Read for CFile {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        println!("CFile::Read {}", buf.len());
         unsafe {
             let buff_ptr = buf.as_mut_ptr();
             let n_read = libc::fread(
@@ -34,7 +37,6 @@ impl Read for CFile {
 
 impl Seek for CFile {
     fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
-        println!("CFile::Seek: {:?}", pos);
         unsafe {
             let (pos, whence) = match pos {
                 SeekFrom::Start(pos) => {
@@ -52,7 +54,7 @@ impl Seek for CFile {
             };
 
             if pos != 0 && whence != libc::SEEK_CUR {
-                let result = dbg!(libc::fseek(self.fh.as_ptr(), pos.into(), whence));
+                let result = libc::fseek(self.fh.as_ptr(), pos.into(), whence);
                 if result != 0 {
                     return Err(std::io::Error::from_raw_os_error(result));
                 }
@@ -63,25 +65,17 @@ impl Seek for CFile {
     }
 }
 
-// pub struct CustomSource {
-//     src: *mut libc::c_void,
-//     read_fn: extern "C" fn(src: *mut libc::c_void, buf: *mut char, len: usize) -> usize,
-//     seek_fn: extern "C" fn(src: *mut libc::c_void, offset: i64, whence: i32) -> usize,
-// }
 
 enum CSource<'a> {
     Memory(Cursor<&'a [u8]>),
     File(CFile),
-    // Custom(CustomSource)
 }
 
 impl<'a> Read for CSource<'a> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         match self {
             CSource::Memory(cursor) => cursor.read(buf),
-            CSource::File(file) => file.read(buf), // CSource::Custom(src) => {
-                                                   //     todo!()
-                                                   // }
+            CSource::File(file) => file.read(buf),
         }
     }
 }
@@ -90,9 +84,53 @@ impl<'a> Seek for CSource<'a> {
     fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
         match self {
             CSource::Memory(cursor) => cursor.seek(pos),
-            CSource::File(file) => file.seek(pos), // CSource::Custom(src) => {
-                                                   //     todo!()
-                                                   // }
+            CSource::File(file) => file.seek(pos),
+        }
+    }
+}
+
+#[repr(C)]
+pub enum LazrsResult {
+    LAZRS_OK,
+    LAZRS_UNKNOWN_LAZ_ITEM,
+    LAZRS_UNKNOWN_LAZ_ITEM_VERSION,
+    LAZRS_UNKNOWN_COMPRESSOR_TYPE,
+    LAZRS_UNSUPPORTED_COMPRESSOR_TYPE,
+    LAZRS_UNSUPPORTED_POINT_FORMAT,
+    LAZRS_IO_ERROR,
+    LAZRS_MISSING_CHUNK_TABLE,
+    LAZRS_OTHER,
+}
+
+impl From<laz::LasZipError> for LazrsResult {
+    fn from(e: LasZipError) -> Self {
+        match e {
+            LasZipError::UnknownLazItem(_) => LazrsResult::LAZRS_UNKNOWN_LAZ_ITEM,
+            LasZipError::UnsupportedLazItemVersion(_, _) => LazrsResult::LAZRS_UNKNOWN_LAZ_ITEM_VERSION,
+            LasZipError::UnknownCompressorType(_) => LazrsResult::LAZRS_UNKNOWN_COMPRESSOR_TYPE,
+            LasZipError::UnsupportedCompressorType(_) => LazrsResult::LAZRS_UNSUPPORTED_COMPRESSOR_TYPE,
+            LasZipError::UnsupportedPointFormat(_) => LazrsResult::LAZRS_UNSUPPORTED_POINT_FORMAT,
+            LasZipError::IoError(_) => LazrsResult::LAZRS_IO_ERROR,
+            LasZipError::MissingChunkTable => LazrsResult::LAZRS_MISSING_CHUNK_TABLE,
+            _ => LazrsResult::LAZRS_OTHER
+        }
+    }
+}
+
+impl From<Result<(), laz::LasZipError>> for LazrsResult {
+    fn from(r: Result<(), LasZipError>) -> Self {
+        match r {
+            Ok(o) => LazrsResult::LAZRS_OK,
+            Err(e) => e.into()
+        }
+    }
+}
+
+impl From<std::io::Result<()>> for LazrsResult {
+    fn from(r: std::io::Result<()>) -> Self {
+        match r {
+            Ok(o) => LazrsResult::LAZRS_OK,
+            Err(e) => LazrsResult::LAZRS_IO_ERROR
         }
     }
 }
@@ -101,6 +139,8 @@ pub struct LasZipDecompressor {
     decompressor: laz::LasZipDecompressor<'static, CSource<'static>>,
 }
 
+
+/// Creates a new decompressor that decompresses data from the given file
 #[no_mangle]
 pub unsafe extern "C" fn lazrs_decompressor_new_file(
     fh: *mut libc::FILE,
@@ -124,6 +164,8 @@ pub unsafe extern "C" fn lazrs_decompressor_new_file(
     Box::into_raw(dbox)
 }
 
+/// Creates a new decompressor that decompresses data from the
+/// given buffer
 #[no_mangle]
 pub unsafe extern "C" fn lazrs_decompress_new_buffer(
     data: *const u8,
@@ -149,6 +191,7 @@ pub unsafe extern "C" fn lazrs_decompress_new_buffer(
     Box::into_raw(dbox)
 }
 
+/// Deletes the decompressor
 #[no_mangle]
 pub unsafe extern "C" fn lazrs_delete_decompressor(decompressor: *mut LasZipDecompressor) {
     if decompressor.is_null() {
@@ -162,12 +205,12 @@ pub unsafe extern "C" fn lazrs_decompress_one(
     decompressor: *mut LasZipDecompressor,
     out: *mut u8,
     len: libc::size_t,
-) {
+) -> LazrsResult {
     if decompressor.is_null() || out.is_null() {
-        return;
+        return LAZRS_OTHER;
     }
     let buf = std::slice::from_raw_parts_mut(out, len);
-    (*decompressor).decompressor.decompress_one(buf).unwrap();
+    (*decompressor).decompressor.decompress_one(buf).into()
 }
 
 #[no_mangle]
@@ -175,15 +218,10 @@ pub unsafe extern "C" fn lazrs_decompress_many(
     decompressor: *mut LasZipDecompressor,
     out: *mut u8,
     len: libc::size_t,
-) {
+) -> LazrsResult {
     if decompressor.is_null() || out.is_null() {
-        return;
+        return LAZRS_OTHER;
     }
     let buf = std::slice::from_raw_parts_mut(out, len);
-    (*decompressor).decompressor.decompress_many(buf).unwrap();
+    (*decompressor).decompressor.decompress_many(buf).into()
 }
-
-
-// pub struct LasZipCompressor {
-//     compressor: laz::LasZipCompressor<'static, CFile>
-// }

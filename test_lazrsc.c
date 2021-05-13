@@ -15,7 +15,7 @@ typedef struct {
   uint8_t *data;
 } las_vlr;
 
-void las_clean_vlr(las_vlr* vlr) {
+void las_clean_vlr(las_vlr *vlr) {
   if (vlr->record_len != 0 && vlr->data != NULL) {
     free(vlr->data);
     vlr->data = NULL;
@@ -34,14 +34,13 @@ typedef struct {
   las_vlr *vlrs;
 } las_header;
 
-void las_clean_header(las_header* header) {
+void las_clean_header(las_header *header) {
   if (header->number_of_vlrs != 0 && header->vlrs != NULL) {
     free(header->vlrs);
     header->vlrs = NULL;
     header->number_of_vlrs = 0;
   }
 }
-
 typedef enum {
   las_error_ok = 0,
   las_error_io,
@@ -95,25 +94,38 @@ las_error fread_las_header(FILE *file, las_header *header) {
     las_vlr *vlr = &header->vlrs[i];
     memcpy(vlr->user_id, raw_vlr_header + 2, sizeof(uint8_t) * 16);
     vlr->record_id = *(uint16_t *)(raw_vlr_header + 18);
-    vlr->record_len = *(uint16_t*)(raw_vlr_header + 20);
-    vlr->data = malloc(sizeof (uint8_t) * vlr->record_len);
+    vlr->record_len = *(uint16_t *)(raw_vlr_header + 20);
+    vlr->data = malloc(sizeof(uint8_t) * vlr->record_len);
     if (vlr->data == NULL) {
       return las_error_oom;
     }
 
     num_read = fread(vlr->data, sizeof(uint8_t), vlr->record_len, file);
-    if (num_read < vlr->record_len && ferror(file))
-    {
+    if (num_read < vlr->record_len && ferror(file)) {
       return las_error_io;
     }
   }
 
-//  fseek(file, header->offset_to_point_data, SEEK_SET);
+  //  fseek(file, header->offset_to_point_data, SEEK_SET);
 
   return las_error_ok;
 }
 
-void print_vlrs(const las_header* header) {
+const las_vlr *find_laszip_vlr(const las_header *las_header) {
+  const las_vlr *vlr = NULL;
+
+  for (uint16_t i = 0; i < las_header->number_of_vlrs; ++i) {
+    const las_vlr *current = &las_header->vlrs[i];
+    if (strcmp(current->user_id, "laszip encoded") == 0 &&
+        current->record_id == 22204) {
+      vlr = current;
+      break;
+    }
+  }
+  return vlr;
+}
+
+void print_vlrs(const las_header *header) {
   printf("Number of vlrs: %d\n", header->number_of_vlrs);
   for (uint32_t i = 0; i < header->number_of_vlrs; ++i) {
     las_vlr *vlr = &header->vlrs[i];
@@ -145,7 +157,8 @@ int main(int argc, char *argv[]) {
   }
   printf("Version: %d.%d\n", (int)header.version_major,
          (int)header.version_minor);
-  printf("Point size: %d, point count: %llu\n", header.point_size, header.point_count);
+  printf("Point size: %d, point count: %llu\n", header.point_size,
+         header.point_count);
   print_vlrs(&header);
 
   if (header.version_minor != 2) {
@@ -155,29 +168,40 @@ int main(int argc, char *argv[]) {
     return EXIT_FAILURE;
   }
 
-  printf("File addr: %x\n", file);
-  printf("ftell: %ld\n", ftell(file));
-  LasZipDecompressor *decompressor = lazrs_decompressor_new_file(file, header.vlrs[0].data, header.vlrs[0].record_len);
-
-  uint8_t *point_data = malloc(header.point_size * sizeof(uint8_t));
-  if (point_data == NULL) {
-    fprintf(stderr, "OOM\n");
-    lazrs_delete_decompressor(decompressor);
+  const las_vlr *laszip_vlr = find_laszip_vlr(&header);
+  if (laszip_vlr == NULL) {
+    fprintf(stderr, "No laszip vlr found\n");
     fclose(file);
     las_clean_header(&header);
     return EXIT_FAILURE;
   }
 
+  LasZipDecompressor *decompressor = lazrs_decompressor_new_file(
+      file, laszip_vlr->data, laszip_vlr->record_len);
+  if (decompressor == NULL) {
+    fprintf(stderr, "Failed to create the decompressor");
+    goto main_exit;
+  }
+
+  uint8_t *point_data = malloc(header.point_size * sizeof(uint8_t));
+  if (point_data == NULL) {
+    fprintf(stderr, "OOM\n");
+    goto main_exit;
+  }
+
   for (size_t i = 0; i < header.point_count; ++i) {
-    printf("Decompressing point %d\n", i);
-    lazrs_decompress_one(decompressor, point_data, header.point_size);
+    if (lazrs_decompress_one(decompressor, point_data, header.point_size) !=
+        LAZRS_OK) {
+      goto main_exit;
+    }
     if (ferror(file)) {
       perror("error ");
-      return EXIT_FAILURE;
+      goto main_exit;
     }
   }
-  printf("ftell: %ld\n", ftell(file));
-  //lazrs_delete_decompressor(decompressor);
+  printf("Decompressed %llu points\n", header.point_count);
+main_exit:
+  lazrs_delete_decompressor(decompressor);
   las_clean_header(&header);
   fclose(file);
   return EXIT_SUCCESS;
