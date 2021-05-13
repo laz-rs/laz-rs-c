@@ -120,7 +120,7 @@ impl From<laz::LasZipError> for LazrsResult {
 impl From<Result<(), laz::LasZipError>> for LazrsResult {
     fn from(r: Result<(), LasZipError>) -> Self {
         match r {
-            Ok(o) => LazrsResult::LAZRS_OK,
+            Ok(_) => LazrsResult::LAZRS_OK,
             Err(e) => e.into()
         }
     }
@@ -129,8 +129,8 @@ impl From<Result<(), laz::LasZipError>> for LazrsResult {
 impl From<std::io::Result<()>> for LazrsResult {
     fn from(r: std::io::Result<()>) -> Self {
         match r {
-            Ok(o) => LazrsResult::LAZRS_OK,
-            Err(e) => LazrsResult::LAZRS_IO_ERROR
+            Ok(_) => LazrsResult::LAZRS_OK,
+            Err(_) => LazrsResult::LAZRS_IO_ERROR
         }
     }
 }
@@ -155,7 +155,7 @@ pub unsafe extern "C" fn lazrs_decompressor_new_file(
             return core::ptr::null_mut::<LasZipDecompressor>();
         }
     };
-    let mut cfile = CFile {
+    let cfile = CFile {
         fh: NonNull::new(fh).unwrap(),
     };
     let dbox = Box::new(LasZipDecompressor {
