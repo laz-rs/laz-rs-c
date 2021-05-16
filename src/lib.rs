@@ -139,9 +139,9 @@ pub unsafe extern "C" fn lazrs_decompressor_new_buffer(
     }
 }
 
-/// Deletes the decompressor
+/// frees the memory for the decompressor
 ///
-/// @decompressor can be NULL
+/// @decompressor can be NULL (no-op)
 #[no_mangle]
 pub unsafe extern "C" fn lazrs_delete_decompressor(decompressor: *mut LasZipDecompressor) {
     if !decompressor.is_null() {
@@ -149,6 +149,11 @@ pub unsafe extern "C" fn lazrs_delete_decompressor(decompressor: *mut LasZipDeco
     }
 }
 
+/// Decompresses one point from the input and write its LAS data to the out buffer
+///
+/// @decompressor: the decompressor, must not be NULL
+/// @out: out buffer that will received the decompressed LAS point
+/// @len: size of the output buffer
 #[no_mangle]
 pub unsafe extern "C" fn lazrs_decompress_one(
     decompressor: *mut LasZipDecompressor,
@@ -161,6 +166,11 @@ pub unsafe extern "C" fn lazrs_decompress_one(
     (*decompressor).decompressor.decompress_one(buf).into()
 }
 
+/// Decompresses many (one or more) points from the input and write its LAS data to the out buffer
+///
+/// @decompressor: the decompressor, must not be NULL
+/// @out: out buffer that will received the decompressed LAS point(s)
+/// @len: size of the output buffer
 #[no_mangle]
 pub unsafe extern "C" fn lazrs_decompress_many(
     decompressor: *mut LasZipDecompressor,
@@ -209,6 +219,11 @@ pub unsafe extern "C" fn lazrs_compressor_new_for_point_format(
     }
 }
 
+/// Compresses one point
+///
+/// @compressor: the compressor, must not be NULL
+/// @data: pointer to point buffer to be compressed, the bytes must be the same as the LAS spec
+/// @size: size of the point buffer
 #[no_mangle]
 pub unsafe extern "C" fn lazrs_compressor_compress_one(
     compressor: *mut LasZipCompressor,
@@ -221,6 +236,7 @@ pub unsafe extern "C" fn lazrs_compressor_compress_one(
     (*compressor).compressor.compress_one(slice).into()
 }
 
+/// Compresses many points
 #[no_mangle]
 pub unsafe extern "C" fn lazrs_compressor_compress_many(
     compressor: *mut LasZipCompressor,
@@ -233,17 +249,18 @@ pub unsafe extern "C" fn lazrs_compressor_compress_many(
     (*compressor).compressor.compress_many(slice).into()
 }
 
+/// Tells the compressor that is it done compressing points
+///
+/// @compressor cannot be NULL
 #[no_mangle]
 pub unsafe extern "C" fn lazrs_compressor_done(compressor: *mut LasZipCompressor) -> LazrsResult {
-    if compressor.is_null() {
-        return LazrsResult::LAZRS_OTHER;
-    }
+    debug_assert!(!compressor.is_null());
     (*compressor).compressor.done().into()
 }
 
 /// Deletes the compressor
 ///
-/// compressor can be NULL
+/// @compressor can be NULL (no-op)
 #[no_mangle]
 pub unsafe extern "C" fn lazrs_compressor_delete(compressor: *mut LasZipCompressor) {
     if !compressor.is_null() {
