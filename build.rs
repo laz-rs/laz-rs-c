@@ -9,5 +9,5 @@ fn main() {
 
     cbindgen::generate_with_config(&crate_dir, config)
         .unwrap()
-        .write_to_file("include/lazrs/lazrs.h");
+        .write_to_file("./include/lazrs/lazrs.h");
 }

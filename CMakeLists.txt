@@ -50,9 +50,16 @@ endif ()
 add_executable(test_lazrsc test_lazrsc.c)
 target_link_libraries(test_lazrsc lazrs)
 
+add_executable(test_compressor test_compressor.c)
+target_link_libraries(test_compressor lazrs)
+
 if (WIN32)
     add_custom_command(
             TARGET test_lazrsc POST_BUILD
             COMMAND "${CMAKE_COMMAND}" -E copy "${CARGO_TARGET}.dll" "$<TARGET_FILE_DIR:test_lazrsc>"
+    )
+    add_custom_command(
+            TARGET test_compressor POST_BUILD
+            COMMAND "${CMAKE_COMMAND}" -E copy "${CARGO_TARGET}.dll" "$<TARGET_FILE_DIR:test_compressor>"
     )
 endif ()
