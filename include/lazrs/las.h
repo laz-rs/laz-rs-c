@@ -128,7 +128,7 @@ void print_vlrs(const las_header *header) {
   printf("Number of vlrs: %d\n", header->number_of_vlrs);
   for (uint32_t i = 0; i < header->number_of_vlrs; ++i) {
     las_vlr *vlr = &header->vlrs[i];
-    printf("user_id: %s, record_id: %d, data len: %d\n", vlr->user_id,
+      printf("user_id: %s, record_id: %d, data len: %d\n", vlr->user_id,
            vlr->record_id, vlr->record_len);
   }
 }
