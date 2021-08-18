@@ -29,7 +29,7 @@ int main(int argc, char *argv[]) {
 
   LasZipCompressor *compressor = NULL;
   LazrsResult result =
-      lazrs_compress_new_for_point_format(&compressor, file, 3, 0);
+      lazrs_compressor_new_for_point_format(&compressor, file, 3, 0);
 
   if (result != LAZRS_OK) {
     goto end;
