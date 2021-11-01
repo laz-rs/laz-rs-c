@@ -1,7 +1,7 @@
+use std::io::{Cursor, Read, Seek, SeekFrom, Write};
 use std::ptr::NonNull;
-use std::io::{Read, Seek, SeekFrom, Write, Cursor};
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub(crate) struct CFile {
     fh: NonNull<libc::FILE>,
 }
@@ -10,7 +10,9 @@ impl CFile {
     /// file must not be null, and it is not checked
     pub(crate) unsafe fn new_unchecked(file: *mut libc::FILE) -> Self {
         debug_assert!(!file.is_null());
-        CFile { fh: NonNull::new_unchecked(file) }
+        CFile {
+            fh: NonNull::new_unchecked(file),
+        }
     }
 }
 
@@ -99,6 +101,7 @@ impl Write for CFile {
     }
 }
 
+#[derive(Debug)]
 pub(crate) enum CSource<'a> {
     Memory(Cursor<&'a [u8]>),
     File(CFile),
