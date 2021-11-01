@@ -10,8 +10,13 @@ LasZipDecompressor::LasZipDecompressor(const uint8_t *data,
     : m_decompressor(nullptr, lazrs_decompressor_delete)
 {
     Lazrs_LasZipDecompressor *decompressor;
-    Lazrs_Result result = lazrs_decompressor_new_buffer(
-        &decompressor, data, size, laszip_vlr_record_data, record_data_len);
+    Lazrs_DecompressorParams params;
+    params.source_type = LAZRS_SOURCE_BUFFER;
+    params.source.buffer.data = data;
+    params.source.buffer.len = size;
+    params.laszip_vlr.data = laszip_vlr_record_data;
+    params.laszip_vlr.len = record_data_len;
+    Lazrs_Result result = lazrs_decompressor_new(&decompressor, params);
     if (result != LAZRS_OK)
     {
         throw std::runtime_error("Failed to create decompressor");

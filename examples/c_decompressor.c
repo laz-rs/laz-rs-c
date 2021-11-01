@@ -29,14 +29,21 @@ int main(int argc, char *argv[])
     Lazrs_LasZipDecompressor *decompressor = NULL;
     Lazrs_Result result;
 
-    result = lazrs_decompressor_new_file(
-        &decompressor, las_file->file, laszip_vlr->data, laszip_vlr->record_len);
+    // Create our decompressor, that will decompress directly from a file
+    Lazrs_DecompressorParams params;
+    params.laszip_vlr.data = laszip_vlr->data;
+    params.laszip_vlr.len = laszip_vlr->record_len;
+    params.source_type = LAZRS_SOURCE_FILE;
+    params.source.file = las_file->file;
+    result = lazrs_decompressor_new(&decompressor, params);
+
     if (result != LAZRS_OK)
     {
         fprintf(stderr, "Failed to create the decompressor");
         goto main_exit;
     }
 
+    // We will decompress points one-by-one into this buffer
     point_data = malloc(las_file->header.point_size * sizeof(uint8_t));
     if (point_data == NULL)
     {
@@ -44,6 +51,7 @@ int main(int argc, char *argv[])
         goto main_exit;
     }
 
+    // Decompression loop
     for (size_t i = 0; i < las_file->header.point_count; ++i)
     {
         result = lazrs_decompressor_decompress_one(
