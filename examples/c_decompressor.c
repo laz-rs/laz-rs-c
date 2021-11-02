@@ -33,8 +33,9 @@ int main(int argc, char *argv[])
     Lazrs_DecompressorParams params;
     params.laszip_vlr.data = laszip_vlr->data;
     params.laszip_vlr.len = laszip_vlr->record_len;
-    params.source_type = LAZRS_SOURCE_FILE;
+    params.source_type = LAZRS_SOURCE_CFILE;
     params.source.file = las_file->file;
+    params.source_offset = las_file->header.offset_to_point_data;
     result = lazrs_decompressor_new(&decompressor, params);
 
     if (result != LAZRS_OK)

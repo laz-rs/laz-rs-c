@@ -1,8 +1,9 @@
-use std::io::{Cursor, Read, Seek, SeekFrom, Write};
+use std::io::{Cursor, Read, Seek, SeekFrom, Write, BufReader};
+use std::fs::File;
 use std::ptr::NonNull;
 
 #[derive(Copy, Clone, Debug)]
-pub(crate) struct CFile {
+pub struct CFile {
     fh: NonNull<libc::FILE>,
 }
 
@@ -102,15 +103,17 @@ impl Write for CFile {
 }
 
 #[derive(Debug)]
-pub(crate) enum CSource<'a> {
+pub enum CSource<'a> {
     Memory(Cursor<&'a [u8]>),
-    File(CFile),
+    CFile(CFile),
+    File(BufReader<File>),
 }
 
 impl<'a> Read for CSource<'a> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         match self {
             CSource::Memory(cursor) => cursor.read(buf),
+            CSource::CFile(file) => file.read(buf),
             CSource::File(file) => file.read(buf),
         }
     }
@@ -120,6 +123,7 @@ impl<'a> Seek for CSource<'a> {
     fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
         match self {
             CSource::Memory(cursor) => cursor.seek(pos),
+            CSource::CFile(file) => file.seek(pos),
             CSource::File(file) => file.seek(pos),
         }
     }
@@ -127,20 +131,20 @@ impl<'a> Seek for CSource<'a> {
 
 pub(crate) enum CDest<'a> {
     Memory(Cursor<&'a mut [u8]>),
-    File(CFile),
+    CFile(CFile),
 }
 
 impl<'a> std::io::Write for CDest<'a> {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         match self {
             CDest::Memory(cursor) => cursor.write(buf),
-            CDest::File(file) => file.write(buf),
+            CDest::CFile(file) => file.write(buf),
         }
     }
 
     fn flush(&mut self) -> std::io::Result<()> {
         match self {
-            CDest::File(file) => file.flush(),
+            CDest::CFile(file) => file.flush(),
             CDest::Memory(cursor) => cursor.flush(),
         }
     }
@@ -150,7 +154,7 @@ impl<'a> Seek for CDest<'a> {
     fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
         match self {
             CDest::Memory(cursor) => cursor.seek(pos),
-            CDest::File(file) => file.seek(pos),
+            CDest::CFile(file) => file.seek(pos),
         }
     }
 }

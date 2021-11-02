@@ -1,16 +1,18 @@
 #include <lazrs/lazrs.h>
 
 #include <memory>
+#include <string>
 
 namespace lazrs
 {
 class LasZipDecompressor
 {
   public:
-    LasZipDecompressor(const uint8_t *data,
-                       size_t size,
+    LasZipDecompressor(std::string fname,
                        const uint8_t *laszip_vlr_record_data,
-                       uint16_t record_data_len);
+                       uint16_t record_data_len,
+                       uint64_t point_offset,
+                       bool parallel = false);
 
     void decompress_one(uint8_t *out, size_t len, Lazrs_Result &result);
     void decompress_one(uint8_t *out, size_t len);

@@ -26,14 +26,10 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
-    uint8_t *compressed_point_data = nullptr;
-    size_t len = 0;
-    las_file_read_all_point_data(las_file, &compressed_point_data, &len);
-
     try
     {
         lazrs::LasZipDecompressor decompressor(
-            compressed_point_data, len, laszip_vlr->data, laszip_vlr->record_len);
+            argv[1], laszip_vlr->data, laszip_vlr->record_len, las_file->header.offset_to_point_data);
         std::vector<uint8_t> point_data(las_file->header.point_size * sizeof(uint8_t), 0);
         for (size_t i{0}; i < las_file->header.point_count; ++i)
         {
@@ -47,10 +43,6 @@ int main(int argc, char *argv[])
         std::cerr << exception.what() << '\n';
     }
 
-    if (compressed_point_data)
-    {
-        free(compressed_point_data);
-    }
     las_file_close(las_file);
     return EXIT_SUCCESS;
 }

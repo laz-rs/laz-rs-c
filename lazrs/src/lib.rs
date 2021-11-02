@@ -5,10 +5,13 @@ mod io;
 use laz;
 use laz::{LasZipError};
 use libc;
-use std::io::Cursor;
+use std::io::{Cursor, Seek, SeekFrom, BufReader};
+use std::fs::File;
+use std::path::Path;
 
 use crate::io::CSource;
 use io::{CDest, CFile};
+use crate::Lazrs_Result::LAZRS_IO_ERROR;
 
 #[repr(C)]
 pub enum Lazrs_Result {
@@ -97,7 +100,8 @@ pub struct Lazrs_Buffer {
 #[derive(Copy, Clone, Debug)]
 pub enum Lazrs_SourceType {
     LAZRS_SOURCE_BUFFER,
-    LAZRS_SOURCE_FILE,
+    LAZRS_SOURCE_CFILE,
+    LAZRS_SOURCE_FNAME,
 }
 
 /// Union of possible sources
@@ -113,12 +117,18 @@ pub union Lazrs_Source {
 pub struct Lazrs_DecompressorParams {
     source_type: Lazrs_SourceType,
     source: Lazrs_Source,
+    source_offset: u64,
     laszip_vlr: Lazrs_Buffer,
+    parallel: bool,
 }
 
+pub enum Lazrs_Decompressor {
+    decompressor(laz::LasZipDecompressor<'static, CSource<'static>>),
+    par_decompressor(laz::ParLasZipDecompressor<CSource<'static>>),
+}
 
 pub struct Lazrs_LasZipDecompressor {
-    decompressor: laz::LasZipDecompressor<'static, CSource<'static>>,
+    decompressor: Lazrs_Decompressor,
 }
 
 /// Creates a new decompressor that decompresses data from the given file
@@ -146,23 +156,55 @@ pub unsafe extern "C" fn lazrs_decompressor_new(
         }
     };
 
-    let csource = match params.source_type {
+    let mut csource = match params.source_type {
         Lazrs_SourceType::LAZRS_SOURCE_BUFFER => CSource::Memory(Cursor::new(
             std::slice::from_raw_parts(params.source.buffer.data, params.source.buffer.len),
         )),
-        Lazrs_SourceType::LAZRS_SOURCE_FILE => {
-            CSource::File(CFile::new_unchecked(params.source.file))
-        }
+        Lazrs_SourceType::LAZRS_SOURCE_CFILE => {
+            CSource::CFile(CFile::new_unchecked(params.source.file))
+        },
+        Lazrs_SourceType::LAZRS_SOURCE_FNAME => {
+            match std::str::from_utf8(std::slice::from_raw_parts(params.source.buffer.data, params.source.buffer.len)) {
+                Ok(fname) => {
+                    match File::open(Path::new(fname)) {
+                        Ok(f) =>  CSource::File(BufReader::new(f)),
+                        Err(_error) => {
+                            return Lazrs_Result::LAZRS_IO_ERROR;
+                        }
+                    }
+                }
+                Err(_error) => {
+                    return Lazrs_Result::LAZRS_IO_ERROR;
+                }
+            }
+        },
     };
 
-    match laz::LasZipDecompressor::new(csource, vlr) {
-        Ok(d) => {
-            *decompressor = Box::into_raw(Box::new(Lazrs_LasZipDecompressor { decompressor: d }));
-            Lazrs_Result::LAZRS_OK
+    if let Err(error) = csource.seek(SeekFrom::Start(params.source_offset)) {
+        return LAZRS_IO_ERROR;
+    }
+
+    if params.parallel {
+        match laz::ParLasZipDecompressor::new(csource, vlr) {
+            Ok(d) => {
+                *decompressor = Box::into_raw(Box::new(Lazrs_LasZipDecompressor { decompressor: Lazrs_Decompressor::par_decompressor(d) }));
+                Lazrs_Result::LAZRS_OK
+            }
+            Err(error) => {
+                *decompressor = std::ptr::null_mut::<Lazrs_LasZipDecompressor>();
+                error.into()
+            }
         }
-        Err(error) => {
-            *decompressor = std::ptr::null_mut::<Lazrs_LasZipDecompressor>();
-            error.into()
+    } else {
+        match laz::LasZipDecompressor::new(csource, vlr) {
+            Ok(d) => {
+                *decompressor = Box::into_raw(Box::new(Lazrs_LasZipDecompressor { decompressor: Lazrs_Decompressor::decompressor(d) }));
+                Lazrs_Result::LAZRS_OK
+            }
+            Err(error) => {
+                *decompressor = std::ptr::null_mut::<Lazrs_LasZipDecompressor>();
+                error.into()
+            }
         }
     }
 }
@@ -191,7 +233,10 @@ pub unsafe extern "C" fn lazrs_decompressor_decompress_one(
     debug_assert!(!decompressor.is_null());
     debug_assert!(!out.is_null());
     let buf = std::slice::from_raw_parts_mut(out, len);
-    (*decompressor).decompressor.decompress_one(buf).into()
+    match (*decompressor).decompressor {
+        Lazrs_Decompressor::par_decompressor (ref mut _d) => { Lazrs_Result::LAZRS_OTHER }
+        Lazrs_Decompressor::decompressor (ref mut d) => { d.decompress_one(buf).into() }
+    }
 }
 
 /// Decompresses many (one or more) points from the input and write its LAS data to the out buffer
@@ -208,7 +253,10 @@ pub unsafe extern "C" fn lazrs_decompressor_decompress_many(
     debug_assert!(!decompressor.is_null());
     debug_assert!(!out.is_null());
     let buf = std::slice::from_raw_parts_mut(out, len);
-    (*decompressor).decompressor.decompress_many(buf).into()
+    match (*decompressor).decompressor {
+        Lazrs_Decompressor::par_decompressor (ref mut d) => { d.decompress_many(buf).into() }
+        Lazrs_Decompressor::decompressor (ref mut d) => { d.decompress_many(buf).into() }
+    }
 }
 
 #[repr(C)]
@@ -237,7 +285,7 @@ pub unsafe extern "C" fn lazrs_compressor_new_for_point_format(
         Err(err) => return err.into(),
     };
     let laz_vlr = laz::LazVlr::from_laz_items(items);
-    let dest = CDest::File(CFile::new_unchecked(params.file));
+    let dest = CDest::CFile(CFile::new_unchecked(params.file));
 
     match laz::LasZipCompressor::new(dest, laz_vlr) {
         Ok(compressor) => {

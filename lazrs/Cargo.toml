@@ -11,5 +11,5 @@ crate-type = ["staticlib", "cdylib"]
 cbindgen = "0.20.0"
 
 [dependencies]
-laz = "^0.5.2"
+laz = { version = "^0.6.0", features = ["parallel"] }
 libc = "^0.2.86"

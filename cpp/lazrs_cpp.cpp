@@ -3,19 +3,22 @@
 
 namespace lazrs
 {
-LasZipDecompressor::LasZipDecompressor(const uint8_t *data,
-                                       size_t size,
+LasZipDecompressor::LasZipDecompressor(std::string fname,
                                        const uint8_t *laszip_vlr_record_data,
-                                       uint16_t record_data_len)
+                                       uint16_t record_data_len,
+                                       uint64_t point_offset,
+                                       bool parallel)
     : m_decompressor(nullptr, lazrs_decompressor_delete)
 {
     Lazrs_LasZipDecompressor *decompressor;
     Lazrs_DecompressorParams params;
-    params.source_type = LAZRS_SOURCE_BUFFER;
-    params.source.buffer.data = data;
-    params.source.buffer.len = size;
+    params.source_type = LAZRS_SOURCE_FNAME;
+    params.source.buffer.data = reinterpret_cast<const uint8_t*>(&fname[0]);
+    params.source.buffer.len = fname.size();
     params.laszip_vlr.data = laszip_vlr_record_data;
     params.laszip_vlr.len = record_data_len;
+    params.parallel = parallel;
+    params.source_offset = point_offset;
     Lazrs_Result result = lazrs_decompressor_new(&decompressor, params);
     if (result != LAZRS_OK)
     {
