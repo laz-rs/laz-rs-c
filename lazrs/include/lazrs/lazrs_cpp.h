@@ -10,7 +10,8 @@ class LasZipDecompressor
     LasZipDecompressor(const uint8_t *data,
                        size_t size,
                        const uint8_t *laszip_vlr_record_data,
-                       uint16_t record_data_len);
+                       uint16_t record_data_len,
+                       uint64_t point_offset);
 
     void decompress_one(uint8_t *out, size_t len, Lazrs_Result &result);
     void decompress_one(uint8_t *out, size_t len);

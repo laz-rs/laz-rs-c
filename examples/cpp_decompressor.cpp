@@ -33,7 +33,7 @@ int main(int argc, char *argv[])
     try
     {
         lazrs::LasZipDecompressor decompressor(
-            compressed_point_data, len, laszip_vlr->data, laszip_vlr->record_len);
+            compressed_point_data, len, laszip_vlr->data, laszip_vlr->record_len, las_file->header.offset_to_point_data);
         std::vector<uint8_t> point_data(las_file->header.point_size * sizeof(uint8_t), 0);
         for (size_t i{0}; i < las_file->header.point_count; ++i)
         {

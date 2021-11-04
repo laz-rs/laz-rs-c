@@ -6,7 +6,8 @@ namespace lazrs
 LasZipDecompressor::LasZipDecompressor(const uint8_t *data,
                                        size_t size,
                                        const uint8_t *laszip_vlr_record_data,
-                                       uint16_t record_data_len)
+                                       uint16_t record_data_len,
+                                       uint64_t point_offset)
     : m_decompressor(nullptr, lazrs_decompressor_delete)
 {
     Lazrs_LasZipDecompressor *decompressor;
@@ -16,6 +17,7 @@ LasZipDecompressor::LasZipDecompressor(const uint8_t *data,
     params.source.buffer.len = size;
     params.laszip_vlr.data = laszip_vlr_record_data;
     params.laszip_vlr.len = record_data_len;
+    params.source_offset = point_offset;
     Lazrs_Result result = lazrs_decompressor_new(&decompressor, params);
     if (result != LAZRS_OK)
     {

@@ -5,7 +5,7 @@ mod io;
 use laz;
 use laz::{LasZipError};
 use libc;
-use std::io::Cursor;
+use std::io::{Cursor, Seek, SeekFrom};
 
 use crate::io::CSource;
 use io::{CDest, CFile};
@@ -113,6 +113,7 @@ pub union Lazrs_Source {
 pub struct Lazrs_DecompressorParams {
     source_type: Lazrs_SourceType,
     source: Lazrs_Source,
+    source_offset: u64,
     laszip_vlr: Lazrs_Buffer,
 }
 
@@ -146,7 +147,7 @@ pub unsafe extern "C" fn lazrs_decompressor_new(
         }
     };
 
-    let csource = match params.source_type {
+    let mut csource = match params.source_type {
         Lazrs_SourceType::LAZRS_SOURCE_BUFFER => CSource::Memory(Cursor::new(
             std::slice::from_raw_parts(params.source.buffer.data, params.source.buffer.len),
         )),
@@ -154,6 +155,7 @@ pub unsafe extern "C" fn lazrs_decompressor_new(
             CSource::File(CFile::new_unchecked(params.source.file))
         }
     };
+    csource.seek(SeekFrom::Start(params.source_offset)); // how to turn this into Lazrs_Result?
 
     match laz::LasZipDecompressor::new(csource, vlr) {
         Ok(d) => {

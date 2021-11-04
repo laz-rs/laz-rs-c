@@ -177,17 +177,8 @@ void print_header(const las_header *header)
 void las_file_read_all_point_data(las_file_t *las_file, uint8_t **output, size_t *len)
 {
     // TODO Err handling
-    size_t len_to_read;
-    if (las_file->header.is_data_compressed)
-    {
-        fseek(las_file->file, 0, SEEK_END);
-        long end = ftell(las_file->file);
-        len_to_read = end - las_file->header.offset_to_point_data;
-    }
-    else
-    {
-        len_to_read = las_file->header.point_size * las_file->header.point_count;
-    }
+    fseek(las_file->file, 0, SEEK_END);
+    long len_to_read = ftell(las_file->file);
 
     if (len_to_read == 0)
     {
@@ -196,7 +187,7 @@ void las_file_read_all_point_data(las_file_t *las_file, uint8_t **output, size_t
 
     *output = (uint8_t *)malloc(sizeof(uint8_t) * len_to_read);
     assert(output != NULL);
-    fseek(las_file->file, las_file->header.offset_to_point_data, SEEK_SET);
+    fseek(las_file->file, 0, SEEK_SET);
     fread(*output, sizeof(uint8_t), len_to_read, las_file->file);
     *len = len_to_read;
 }
