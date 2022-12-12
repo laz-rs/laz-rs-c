@@ -17,3 +17,6 @@ libc = "^0.2.86"
 
 [features]
 parallel =  ["laz/parallel"]
+
+[profile.dev]
+panic = "abort"

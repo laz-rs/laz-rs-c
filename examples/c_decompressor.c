@@ -1,10 +1,10 @@
 #include <lazrs/lazrs.h>
 #include <minilas/las.h>
 
+#include <inttypes.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <inttypes.h>
 
 int main(int argc, char *argv[])
 {
@@ -38,7 +38,7 @@ int main(int argc, char *argv[])
     params.source.file = las_file->file;
     params.source_offset = las_file->header.offset_to_point_data;
     int prefer_parallel = false;
-    result = lazrs_decompressor_new(&decompressor, params, prefer_parallel);
+    result = lazrs_decompressor_new(params, prefer_parallel, &decompressor);
 
     if (result != LAZRS_OK)
     {

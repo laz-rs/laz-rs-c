@@ -13,12 +13,12 @@ LasZipDecompressor::LasZipDecompressor(std::string fname,
     Lazrs_LasZipDecompressor *decompressor;
     Lazrs_DecompressorParams params;
     params.source_type = LAZRS_SOURCE_FNAME;
-    params.source.buffer.data = reinterpret_cast<const uint8_t*>(&fname[0]);
+    params.source.buffer.data = reinterpret_cast<const uint8_t *>(&fname[0]);
     params.source.buffer.len = fname.size();
     params.laszip_vlr.data = laszip_vlr_record_data;
     params.laszip_vlr.len = record_data_len;
     params.source_offset = point_offset;
-    Lazrs_Result result = lazrs_decompressor_new(&decompressor, params, parallel);
+    Lazrs_Result result = lazrs_decompressor_new(params, parallel, &decompressor);
     if (result != LAZRS_OK)
     {
         throw std::runtime_error("Failed to create sequential");
