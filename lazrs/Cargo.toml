@@ -8,8 +8,12 @@ edition = "2018"
 crate-type = ["staticlib", "cdylib"]
 
 [build-dependencies]
-cbindgen = "0.20.0"
+cbindgen = "0.24.3"
 
 [dependencies]
-laz = { version = "^0.6.0", features = ["parallel"] }
+laz = { version = "^0.7.0" }
 libc = "^0.2.86"
+
+
+[features]
+parallel =  ["laz/parallel"]

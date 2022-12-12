@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cinttypes>
 #include <iostream>
 #include <vector>
 #include <chrono>
@@ -15,7 +16,7 @@ void decompress_points(std::string fname, las_file_t *las_file, const las_vlr *l
     std::vector<uint8_t> point_data(las_file->header.point_size * las_file->header.point_count *sizeof(uint8_t), 0);
     decompressor.decompress_many(point_data.data(),
                                 las_file->header.point_size * las_file->header.point_count * sizeof(uint8_t));
-    printf("Decompressed %llu points\n", las_file->header.point_count);
+    printf("Decompressed %" PRIu64 "points\n", las_file->header.point_count);
 }
 
 int main(int argc, char *argv[])

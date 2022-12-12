@@ -1,5 +1,5 @@
-use std::io::{Cursor, Read, Seek, SeekFrom, Write, BufReader};
 use std::fs::File;
+use std::io::{BufReader, Cursor, Read, Seek, SeekFrom, Write};
 use std::ptr::NonNull;
 
 #[derive(Copy, Clone, Debug)]
@@ -107,6 +107,39 @@ pub enum CSource<'a> {
     Memory(Cursor<&'a [u8]>),
     CFile(CFile),
     File(BufReader<File>),
+}
+
+impl<'a> CSource<'a> {
+    pub(crate) unsafe fn from_c_source(
+        source_type: crate::Lazrs_SourceType,
+        source: crate::Lazrs_Source,
+    ) -> Result<Self, crate::Lazrs_Result> {
+        let csource = match source_type {
+            crate::Lazrs_SourceType::LAZRS_SOURCE_BUFFER => CSource::Memory(Cursor::new(
+                std::slice::from_raw_parts(source.buffer.data, source.buffer.len),
+            )),
+            crate::Lazrs_SourceType::LAZRS_SOURCE_CFILE => {
+                CSource::CFile(CFile::new_unchecked(source.file))
+            }
+            crate::Lazrs_SourceType::LAZRS_SOURCE_FNAME => {
+                match std::str::from_utf8(std::slice::from_raw_parts(
+                    source.buffer.data,
+                    source.buffer.len,
+                )) {
+                    Ok(fname) => match File::open(std::path::Path::new(fname)) {
+                        Ok(f) => CSource::File(BufReader::new(f)),
+                        Err(_error) => {
+                            return Err(crate::Lazrs_Result::LAZRS_IO_ERROR);
+                        }
+                    },
+                    Err(_error) => {
+                        return Err(crate::Lazrs_Result::LAZRS_IO_ERROR);
+                    }
+                }
+            }
+        };
+        Ok(csource)
+    }
 }
 
 impl<'a> Read for CSource<'a> {

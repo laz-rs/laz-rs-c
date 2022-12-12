@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <inttypes.h>
 
 int main(int argc, char *argv[])
 {
@@ -29,18 +30,19 @@ int main(int argc, char *argv[])
     Lazrs_LasZipDecompressor *decompressor = NULL;
     Lazrs_Result result;
 
-    // Create our decompressor, that will decompress directly from a file
+    // Create our sequential, that will decompress directly from a file
     Lazrs_DecompressorParams params;
     params.laszip_vlr.data = laszip_vlr->data;
     params.laszip_vlr.len = laszip_vlr->record_len;
     params.source_type = LAZRS_SOURCE_CFILE;
     params.source.file = las_file->file;
     params.source_offset = las_file->header.offset_to_point_data;
-    result = lazrs_decompressor_new(&decompressor, params);
+    int prefer_parallel = false;
+    result = lazrs_decompressor_new(&decompressor, params, prefer_parallel);
 
     if (result != LAZRS_OK)
     {
-        fprintf(stderr, "Failed to create the decompressor");
+        fprintf(stderr, "Failed to create the sequential");
         goto main_exit;
     }
 
@@ -68,7 +70,7 @@ int main(int argc, char *argv[])
             goto main_exit;
         }
     }
-    printf("Decompressed %llu points\n", las_file->header.point_count);
+    printf("Decompressed %" PRIu64 "points\n", las_file->header.point_count);
 
 main_exit:
     lazrs_decompressor_delete(decompressor);

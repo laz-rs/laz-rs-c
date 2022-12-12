@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cinttypes>
 #include <iostream>
 #include <vector>
 
@@ -36,7 +37,7 @@ int main(int argc, char *argv[])
             decompressor.decompress_one(point_data.data(),
                                         las_file->header.point_size * sizeof(uint8_t));
         }
-        printf("Decompressed %llu points\n", las_file->header.point_count);
+        printf("Decompressed %" PRIu64 "points\n", las_file->header.point_count);
     }
     catch (const std::exception &exception)
     {
