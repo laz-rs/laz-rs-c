@@ -1,13 +1,10 @@
+use crate::Lazrs_SourceType;
+use libc::c_int;
 use std::convert::TryInto;
 use std::ffi::c_void;
 use std::fs::File;
 use std::io::{BufReader, Cursor, Read, Seek, SeekFrom, Write};
 use std::ptr::NonNull;
-use laz::LasZipError::IoError;
-use libc::c_int;
-use crate::Lazrs_SourceType;
-
-
 
 fn seek_from_to_c_whence(seek_from: SeekFrom) -> (i64, c_int) {
     match seek_from {
@@ -15,12 +12,8 @@ fn seek_from_to_c_whence(seek_from: SeekFrom) -> (i64, c_int) {
             assert!(pos < i64::MAX as u64);
             (pos as i64, libc::SEEK_SET)
         }
-        SeekFrom::End(pos) => {
-            (pos, libc::SEEK_END)
-        }
-        SeekFrom::Current(pos) => {
-            (pos, libc::SEEK_CUR)
-        }
+        SeekFrom::End(pos) => (pos, libc::SEEK_END),
+        SeekFrom::Current(pos) => (pos, libc::SEEK_CUR),
     }
 }
 
@@ -33,8 +26,8 @@ pub struct CustomSource {
     pub tell_fn: unsafe extern "C" fn(user_data: *mut c_void) -> u64,
 }
 
-unsafe impl Send for CustomSource { }
-unsafe impl Sync for CustomSource { }
+unsafe impl Send for CustomSource {}
+unsafe impl Sync for CustomSource {}
 
 impl Read for CustomSource {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
@@ -53,16 +46,15 @@ impl Read for CustomSource {
 impl Seek for CustomSource {
     fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
         let (pos, whence) = seek_from_to_c_whence(pos);
-        let ret = unsafe {
-            (self.seek_fn)(self.user_data, pos, whence)
-        };
+        let ret = unsafe { (self.seek_fn)(self.user_data, pos, whence) };
 
         if ret != 0 {
-            return Err(std::io::Error::new(std::io::ErrorKind::Other, "Failed to seek".to_string()));
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Failed to seek".to_string(),
+            ));
         }
-        let position = unsafe {
-            (self.tell_fn)(self.user_data)
-        };
+        let position = unsafe { (self.tell_fn)(self.user_data) };
 
         Ok(position as u64)
     }
@@ -191,9 +183,7 @@ impl<'a> CSource<'a> {
                     }
                 }
             }
-            Lazrs_SourceType::LAZRS_SOURCE_CUSTOM => {
-                Self::Custom(source.custom)
-            }
+            Lazrs_SourceType::LAZRS_SOURCE_CUSTOM => Self::Custom(source.custom),
         };
         Ok(csource)
     }
@@ -205,7 +195,7 @@ impl<'a> Read for CSource<'a> {
             CSource::Memory(cursor) => cursor.read(buf),
             CSource::CFile(file) => file.read(buf),
             CSource::File(file) => file.read(buf),
-            CSource::Custom(custom) => {custom.read(buf)}
+            CSource::Custom(custom) => custom.read(buf),
         }
     }
 }
@@ -216,11 +206,10 @@ impl<'a> Seek for CSource<'a> {
             CSource::Memory(cursor) => cursor.seek(pos),
             CSource::CFile(file) => file.seek(pos),
             CSource::File(file) => file.seek(pos),
-            CSource::Custom(custom) => {custom.seek(pos)}
+            CSource::Custom(custom) => custom.seek(pos),
         }
     }
 }
-
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
@@ -232,8 +221,8 @@ pub struct CustomDest {
     pub tell_fn: unsafe extern "C" fn(user_data: *mut c_void) -> u64,
 }
 
-unsafe impl Send for CustomDest { }
-unsafe impl Sync for CustomDest { }
+unsafe impl Send for CustomDest {}
+unsafe impl Sync for CustomDest {}
 
 impl Write for CustomDest {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
@@ -242,9 +231,7 @@ impl Write for CustomDest {
         let ptr = buf.as_ptr();
         let size = buf.len();
 
-        let n_written = unsafe {
-            (self.write_fn)(self.user_data, ptr, size.try_into().unwrap())
-        };
+        let n_written = unsafe { (self.write_fn)(self.user_data, ptr, size.try_into().unwrap()) };
 
         Ok(n_written.try_into().unwrap())
     }
@@ -252,12 +239,13 @@ impl Write for CustomDest {
     fn flush(&mut self) -> std::io::Result<()> {
         assert!(!self.user_data.is_null());
 
-        let r = unsafe {
-            (self.flush_fn)(self.user_data)
-        };
+        let r = unsafe { (self.flush_fn)(self.user_data) };
 
         if r != 0 {
-            Err(std::io::Error::new(std::io::ErrorKind::Other, "Failed to flush".to_string()))
+            Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Failed to flush".to_string(),
+            ))
         } else {
             Ok(())
         }
@@ -267,23 +255,21 @@ impl Write for CustomDest {
 impl Seek for CustomDest {
     fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
         let (pos, whence) = seek_from_to_c_whence(pos);
-        let ret = unsafe {
-            (self.seek_fn)(self.user_data, pos, whence)
-        };
+        let ret = unsafe { (self.seek_fn)(self.user_data, pos, whence) };
 
         if ret != 0 {
-            return Err(std::io::Error::new(std::io::ErrorKind::Other, "Failed to seek".to_string()));
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Failed to seek".to_string(),
+            ));
         }
-        let position = unsafe {
-            (self.tell_fn)(self.user_data)
-        };
+        let position = unsafe { (self.tell_fn)(self.user_data) };
 
         Ok(position as u64)
     }
 }
 
-
-pub(crate) enum CDest {
+pub enum CDest {
     CFile(CFile),
     Custom(CustomDest),
 }

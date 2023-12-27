@@ -35,7 +35,7 @@ class LasZipCompressor
 
   private:
     using Lazrs_LasZipCompressorPtr =
-        std::unique_ptr<Lazrs_SeqLasZipCompressor, void (*)(Lazrs_SeqLasZipCompressor *)>;
+        std::unique_ptr<Lazrs_LasZipCompressor, void (*)(Lazrs_LasZipCompressor *)>;
     Lazrs_LasZipCompressorPtr m_compressor;
 };
 } // namespace lazrs

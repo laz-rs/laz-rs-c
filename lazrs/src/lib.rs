@@ -2,19 +2,15 @@
 
 mod io;
 
-use std::any::Any;
-use std::ffi::{c_char, CString};
-use laz;
 use laz::LasZipError;
 use libc;
-use std::io::{Seek, SeekFrom};
-use std::panic::{catch_unwind, RefUnwindSafe};
-use std::panic::{self, AssertUnwindSafe};
-use std::cell::RefCell;
 use std::convert::TryInto;
-use std::ptr::slice_from_raw_parts_mut;
+use std::ffi::CString;
+use std::io::{Seek, SeekFrom};
+use std::panic::catch_unwind;
+use std::panic::{self, AssertUnwindSafe};
 
-use crate::io::{CSource, CustomSource, CustomDest};
+use crate::io::{CSource, CustomDest, CustomSource};
 use crate::Lazrs_Result::LAZRS_IO_ERROR;
 use io::{CDest, CFile};
 
@@ -28,7 +24,7 @@ use io::{CDest, CFile};
 // }
 
 #[repr(C)]
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Lazrs_Result {
     LAZRS_OK,
     LAZRS_UNKNOWN_LAZ_ITEM,
@@ -41,7 +37,6 @@ pub enum Lazrs_Result {
     LAZRS_OTHER,
 }
 
-
 #[no_mangle]
 pub unsafe extern "C" fn lazrs_fprint_result(res: Lazrs_Result, stream: *mut libc::FILE) {
     let debug_repr = format!("{:?}\n", res);
@@ -49,8 +44,6 @@ pub unsafe extern "C" fn lazrs_fprint_result(res: Lazrs_Result, stream: *mut lib
     let s = CString::new(debug_repr).unwrap();
     libc::fprintf(stream, s.as_c_str().as_ptr());
 }
-
-
 
 impl From<laz::LasZipError> for Lazrs_Result {
     fn from(e: LasZipError) -> Self {
@@ -89,30 +82,6 @@ impl From<std::io::Result<()>> for Lazrs_Result {
     }
 }
 
-// pub struct Lazrs_LazVlr {
-//     vlr: laz::LazVlr,
-// }
-//
-//
-// #[no_mangle]
-// pub unsafe extern "C" fn lazrs_laz_vlr_from_buffer(vlr: *mut *mut Lazrs_LazVlr, record_data: *const u8, record_data_len: u16) -> Lazrs_Result {
-//     if vlr.is_null() {
-//         return Lazrs_Result::LAZRS_OTHER;
-//     }
-//
-//     let vlr_data = std::slice::from_raw_parts(record_data, usize::from(record_data_len));
-//     match laz::LazVlr::from_buffer(vlr_data) {
-//         Ok(rvlr) => {
-//             *vlr = Box::into_raw(Box::new(Lazrs_LazVlr { vlr: rvlr }));
-//             Lazrs_Result::LAZRS_OK
-//         }
-//         Err(error) => {
-//             *vlr = std::ptr::null_mut();
-//             error.into()
-//         }
-//     }
-// }
-
 /// Simple struct representing a non-mutable byte buffer
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
@@ -125,9 +94,13 @@ pub struct Lazrs_Buffer {
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
 pub enum Lazrs_SourceType {
+    /// The source is an in memory buffer
     LAZRS_SOURCE_BUFFER,
+    // The source is a C `FILE` pointer
     LAZRS_SOURCE_CFILE,
+    // The source is a filename that lazrs will open
     LAZRS_SOURCE_FNAME,
+    // The source is something custom
     LAZRS_SOURCE_CUSTOM,
 }
 
@@ -164,9 +137,9 @@ pub unsafe extern "C" fn lazrs_seq_laszip_decompressor_new(
 ) -> Lazrs_Result {
     debug_assert!(!decompressor.is_null());
 
-    let call_result = panic::catch_unwind( AssertUnwindSafe(|| {
+    let call_result = panic::catch_unwind(AssertUnwindSafe(|| {
         let vlr_data =
-        std::slice::from_raw_parts(params.laszip_vlr.data, usize::from(params.laszip_vlr.len));
+            std::slice::from_raw_parts(params.laszip_vlr.data, usize::from(params.laszip_vlr.len));
         let vlr = match laz::LazVlr::from_buffer(vlr_data) {
             Ok(vlr) => vlr,
             Err(error) => {
@@ -183,7 +156,7 @@ pub unsafe extern "C" fn lazrs_seq_laszip_decompressor_new(
             return LAZRS_IO_ERROR;
         }
 
-       match laz::LasZipDecompressor::new(csource, vlr) {
+        match laz::LasZipDecompressor::new(csource, vlr) {
             Ok(d) => {
                 *decompressor = Box::into_raw(Box::new(Lazrs_SeqLasZipDecompressor(d)));
                 Lazrs_Result::LAZRS_OK
@@ -197,15 +170,7 @@ pub unsafe extern "C" fn lazrs_seq_laszip_decompressor_new(
 
     match call_result {
         Ok(r) => r,
-        Err(_) => {
-            // if let Some(s) = err.downcast_ref::<&str>() {
-            //     println!("panic occurred: {s:?}");
-            // } else {
-            //     println!("panic occurred");
-            // }
-            // eprintln!("err: {:?}", err);
-            Lazrs_Result::LAZRS_OTHER
-        },
+        Err(_) => Lazrs_Result::LAZRS_OTHER,
     }
 }
 
@@ -236,15 +201,13 @@ pub unsafe extern "C" fn lazrs_seq_laszip_decompressor_decompress_one(
     debug_assert!(!out.is_null());
 
     let mut decompressor = AssertUnwindSafe(&mut *decompressor);
-    let call_result = catch_unwind(move || -> Lazrs_Result{
+    let call_result = catch_unwind(move || -> Lazrs_Result {
         let buf = std::slice::from_raw_parts_mut(out, len);
         (*decompressor).0.decompress_one(buf).into()
     });
     match call_result {
         Ok(r) => r,
-        Err(_) => {
-            Lazrs_Result::LAZRS_OTHER
-        },
+        Err(_) => Lazrs_Result::LAZRS_OTHER,
     }
 }
 
@@ -270,9 +233,7 @@ pub unsafe extern "C" fn lazrs_seq_laszip_decompressor_decompress_many(
 
     match call_result {
         Ok(r) => r,
-        Err(_) => {
-            Lazrs_Result::LAZRS_OTHER
-        },
+        Err(_) => Lazrs_Result::LAZRS_OTHER,
     }
 }
 
@@ -522,7 +483,7 @@ pub struct Lazrs_SeqLasZipCompressor {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn lazrs_compressor_new_for_point_format(
+pub unsafe extern "C" fn lazrs_seq_compressor_new_for_point_format(
     params: Lazrs_CompressorParams,
     c_compressor: *mut *mut Lazrs_SeqLasZipCompressor,
 ) -> Lazrs_Result {
@@ -540,12 +501,8 @@ pub unsafe extern "C" fn lazrs_compressor_new_for_point_format(
     let laz_vlr = laz::LazVlr::from_laz_items(items);
 
     let dest = match params.dest_type {
-        Lazrs_DestType::LAZRS_DEST_CFILE => {
-            CDest::CFile(CFile::new_unchecked(params.dest.file))
-        }
-        Lazrs_DestType::LAZRS_DEST_CUSTOM => {
-            CDest::Custom(params.dest.custom)
-        }
+        Lazrs_DestType::LAZRS_DEST_CFILE => CDest::CFile(CFile::new_unchecked(params.dest.file)),
+        Lazrs_DestType::LAZRS_DEST_CUSTOM => CDest::Custom(params.dest.custom),
     };
 
     match laz::LasZipCompressor::new(dest, laz_vlr) {
@@ -562,7 +519,7 @@ pub unsafe extern "C" fn lazrs_compressor_new_for_point_format(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn lazrs_compressor_laszip_vlr_size(
+pub unsafe extern "C" fn lazrs_seq_compressor_laszip_vlr_size(
     compressor: *mut Lazrs_SeqLasZipCompressor,
 ) -> u16 {
     debug_assert!(!compressor.is_null());
@@ -575,7 +532,7 @@ pub unsafe extern "C" fn lazrs_compressor_laszip_vlr_size(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn lazrs_compressor_laszip_vlr_data(
+pub unsafe extern "C" fn lazrs_seq_compressor_laszip_vlr_data(
     compressor: *mut Lazrs_SeqLasZipCompressor,
     data: *mut u8,
     size: usize,
@@ -598,7 +555,7 @@ pub unsafe extern "C" fn lazrs_compressor_laszip_vlr_data(
 /// @data: pointer to point buffer to be compressed, the bytes must be the same as the LAS spec
 /// @size: size of the point buffer
 #[no_mangle]
-pub unsafe extern "C" fn lazrs_compressor_compress_one(
+pub unsafe extern "C" fn lazrs_seq_compressor_compress_one(
     compressor: *mut Lazrs_SeqLasZipCompressor,
     data: *const u8,
     size: usize,
@@ -611,7 +568,7 @@ pub unsafe extern "C" fn lazrs_compressor_compress_one(
 
 /// Compresses many points
 #[no_mangle]
-pub unsafe extern "C" fn lazrs_compressor_compress_many(
+pub unsafe extern "C" fn lazrs_seq_compressor_compress_many(
     compressor: *mut Lazrs_SeqLasZipCompressor,
     data: *const u8,
     size: usize,
@@ -626,7 +583,7 @@ pub unsafe extern "C" fn lazrs_compressor_compress_many(
 ///
 /// @compressor cannot be NULL
 #[no_mangle]
-pub unsafe extern "C" fn lazrs_compressor_done(
+pub unsafe extern "C" fn lazrs_seq_compressor_done(
     compressor: *mut Lazrs_SeqLasZipCompressor,
 ) -> Lazrs_Result {
     debug_assert!(!compressor.is_null());
@@ -637,7 +594,200 @@ pub unsafe extern "C" fn lazrs_compressor_done(
 ///
 /// @compressor can be NULL (no-op)
 #[no_mangle]
-pub unsafe extern "C" fn lazrs_compressor_delete(compressor: *mut Lazrs_SeqLasZipCompressor) {
+pub unsafe extern "C" fn lazrs_seq_compressor_delete(compressor: *mut Lazrs_SeqLasZipCompressor) {
+    if !compressor.is_null() {
+        let _ = Box::from_raw(compressor);
+    }
+}
+
+//==================================================================================================
+
+/// A compressor that can be either single or multi-threaded.
+///
+/// The choice is done at creation time and cannot be changed midway through the
+/// compression
+pub enum Lazrs_LasZipCompressor {
+    sequential(laz::LasZipCompressor<'static, CDest>),
+    #[cfg(feature = "parallel")]
+    parallel(laz::ParLasZipCompressor<CDest>),
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn lazrs_compressor_new_for_point_format(
+    params: Lazrs_CompressorParams,
+    prefer_parallel: bool,
+    c_compressor: *mut *mut Lazrs_LasZipCompressor,
+) -> Lazrs_Result {
+    if c_compressor.is_null() {
+        return Lazrs_Result::LAZRS_OTHER;
+    }
+    let items = laz::LazItemRecordBuilder::default_for_point_format_id(
+        params.point_format_id,
+        params.num_extra_bytes,
+    );
+    let items = match items {
+        Ok(items) => items,
+        Err(err) => return err.into(),
+    };
+    let laz_vlr = laz::LazVlr::from_laz_items(items);
+
+    let dest = match params.dest_type {
+        Lazrs_DestType::LAZRS_DEST_CFILE => CDest::CFile(CFile::new_unchecked(params.dest.file)),
+        Lazrs_DestType::LAZRS_DEST_CUSTOM => CDest::Custom(params.dest.custom),
+    };
+
+    #[cfg(feature = "parallel")]
+    if prefer_parallel {
+        match laz::ParLasZipCompressor::new(dest, laz_vlr) {
+            Ok(compressor) => {
+                let compressor = Box::new(Lazrs_LasZipCompressor::parallel(compressor));
+                *c_compressor = Box::into_raw(compressor);
+                Lazrs_Result::LAZRS_OK
+            }
+            Err(error) => {
+                *c_compressor = std::ptr::null_mut::<Lazrs_LasZipCompressor>();
+                error.into()
+            }
+        }
+    } else {
+        match laz::LasZipCompressor::new(dest, laz_vlr) {
+            Ok(compressor) => {
+                let compressor = Box::new(Lazrs_LasZipCompressor::sequential(compressor));
+                *c_compressor = Box::into_raw(compressor);
+                Lazrs_Result::LAZRS_OK
+            }
+            Err(error) => {
+                *c_compressor = std::ptr::null_mut::<Lazrs_LasZipCompressor>();
+                error.into()
+            }
+        }
+    }
+    #[cfg(not(feature = "parallel"))]
+    {
+        let _ = prefer_parallel;
+        match laz::LasZipCompressor::new(dest, laz_vlr) {
+            Ok(compressor) => {
+                let compressor = Box::new(Lazrs_LasZipCompressor::sequential(compressor));
+                *c_compressor = Box::into_raw(compressor);
+                Lazrs_Result::LAZRS_OK
+            }
+            Err(error) => {
+                *c_compressor = std::ptr::null_mut::<Lazrs_LasZipCompressor>();
+                error.into()
+            }
+        }
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn lazrs_compressor_laszip_vlr_size(
+    compressor: *mut Lazrs_LasZipCompressor,
+) -> u16 {
+    debug_assert!(!compressor.is_null());
+
+    // TODO we should have a data_len() function in laz-rs
+    let mut data = Vec::<u8>::new();
+    match &*compressor {
+        Lazrs_LasZipCompressor::sequential(compressor) => {
+            compressor.vlr().write_to(&mut data).unwrap();
+        }
+        #[cfg(feature = "parallel")]
+        Lazrs_LasZipCompressor::parallel(compressor) => {
+            compressor.vlr().write_to(&mut data).unwrap();
+        }
+    }
+
+    return data.len().try_into().unwrap();
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn lazrs_compressor_laszip_vlr_data(
+    compressor: *mut Lazrs_LasZipCompressor,
+    data: *mut u8,
+    size: usize,
+) -> Lazrs_Result {
+    debug_assert!(!compressor.is_null());
+
+    // TODO having to create this temp data vec is a bit sub optimal
+    // but slices don't impl Write
+    let mut tmp = Vec::<u8>::new();
+    let r = match &*compressor {
+        Lazrs_LasZipCompressor::sequential(compressor) => {
+            compressor.vlr().write_to(&mut tmp).into()
+        }
+        #[cfg(feature = "parallel")]
+        Lazrs_LasZipCompressor::parallel(compressor) => compressor.vlr().write_to(&mut tmp).into(),
+    };
+
+    if r == Lazrs_Result::LAZRS_OK {
+        std::slice::from_raw_parts_mut(data, size).copy_from_slice(tmp.as_slice());
+    }
+
+    r
+}
+
+/// Compresses one point
+///
+/// @compressor: the compressor, must not be NULL
+/// @data: pointer to point buffer to be compressed, the bytes must be the same as the LAS spec
+/// @size: size of the point buffer
+#[no_mangle]
+pub unsafe extern "C" fn lazrs_compressor_compress_one(
+    compressor: *mut Lazrs_LasZipCompressor,
+    data: *const u8,
+    size: usize,
+) -> Lazrs_Result {
+    debug_assert!(!compressor.is_null());
+    debug_assert!(!data.is_null());
+    let slice = std::slice::from_raw_parts(data, size);
+    match &mut *compressor {
+        Lazrs_LasZipCompressor::sequential(compressor) => compressor.compress_one(slice).into(),
+        #[cfg(feature = "parallel")]
+        Lazrs_LasZipCompressor::parallel(compressor) => compressor.compress_many(slice).into(),
+    }
+}
+
+/// Compresses many points
+///
+/// @compressor: the compressor, must not be NULL
+/// @data: pointer to point buffer to be compressed, the bytes must be the same as the LAS spec
+/// @size: size of the point buffer
+#[no_mangle]
+pub unsafe extern "C" fn lazrs_compressor_compress_many(
+    compressor: *mut Lazrs_LasZipCompressor,
+    data: *const u8,
+    size: usize,
+) -> Lazrs_Result {
+    debug_assert!(!compressor.is_null());
+    debug_assert!(!data.is_null());
+    let slice = std::slice::from_raw_parts(data, size);
+    match &mut *compressor {
+        Lazrs_LasZipCompressor::sequential(compressor) => compressor.compress_many(slice).into(),
+        #[cfg(feature = "parallel")]
+        Lazrs_LasZipCompressor::parallel(compressor) => compressor.compress_many(slice).into(),
+    }
+}
+
+/// Tells the compressor that is it done compressing points
+///
+/// @compressor cannot be NULL
+#[no_mangle]
+pub unsafe extern "C" fn lazrs_compressor_done(
+    compressor: *mut Lazrs_LasZipCompressor,
+) -> Lazrs_Result {
+    debug_assert!(!compressor.is_null());
+    match &mut *compressor {
+        Lazrs_LasZipCompressor::sequential(compressor) => compressor.done().into(),
+        #[cfg(feature = "parallel")]
+        Lazrs_LasZipCompressor::parallel(compressor) => compressor.done().into(),
+    }
+}
+
+/// Deletes the compressor
+///
+/// @compressor can be NULL (no-op)
+#[no_mangle]
+pub unsafe extern "C" fn lazrs_compressor_delete(compressor: *mut Lazrs_LasZipCompressor) {
     if !compressor.is_null() {
         let _ = Box::from_raw(compressor);
     }
