@@ -13,7 +13,7 @@ corrosion_import_crate(
 )
 target_include_directories(laz-rs-c INTERFACE "${CMAKE_CURRENT_LIST_DIR}/include")
 
-option(PARALLEL_FEATURE "Build laz-rs with parallel capabilities" OFF)
+option(PARALLEL_FEATURE "Build laz-rs with parallel capabilities" ON)
 
 if (PARALLEL_FEATURE)
     corrosion_set_features(laz-rs-c
