@@ -18,6 +18,6 @@ option(PARALLEL_FEATURE "Build laz-rs with parallel capabilities" ON)
 if (PARALLEL_FEATURE)
     corrosion_set_features(laz-rs-c
         FEATURES
-            PARALLEL
+            parallel
     )
 endif()
